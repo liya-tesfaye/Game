@@ -401,6 +401,77 @@ monster_move_end:
 	pop ebp
 	ret
 
+;---------------------------------------------------------------------------------
+;limted vision
+;tha player can only see 3 steps in all directions
+;sight_check
+;returns eax = 1 if tile is visible
+;eax = 0 if tiles is hidden
+
+sight_check:
+    push ebp
+    mov ebp, esp
+
+    push esi
+    push edi
+
+    ; Coordinates passed by render
+    mov esi, DWORD [ebp+8]     ; tile x
+    mov edi, DWORD [ebp+12]    ; tile y
+
+    ; Always make border tiles visible
+    cmp esi, 0
+    je sight_visible
+
+    cmp esi, WIDTH-1
+    je sight_visible
+
+    cmp edi, 0
+    je sight_visible
+
+    cmp edi, HEIGHT-1
+    je sight_visible
+
+    ; abs(tile_x - player_x)
+    mov eax, esi
+    sub eax, DWORD [xpos]
+
+    cmp eax, 0
+    jge sight_x_done
+    neg eax
+
+sight_x_done:
+    cmp eax, 2
+    jg sight_hidden
+
+    ; abs(tile_y - player_y)
+    mov eax, edi
+    sub eax, DWORD [ypos]
+
+    cmp eax, 0
+    jge sight_y_done
+    neg eax
+
+sight_y_done:
+    cmp eax, 2
+    jg sight_hidden
+
+sight_visible:
+    mov eax, 1
+    jmp sight_exit
+
+sight_hidden:
+    mov eax, 0
+
+sight_exit:
+    pop edi
+    pop esi
+
+    mov esp, ebp
+    pop ebp
+    ret
+
+
 raw_mode_on:
 
         push    ebp
@@ -513,20 +584,46 @@ render:
                 cmp             DWORD [ebp - 8], WIDTH
                 je              x_loop_end
 
-                        ; check if (xpos,ypos)=(x,y)
-                        mov             eax, DWORD [xpos]
-                        cmp             eax, DWORD [ebp - 8]
-                        jne             print_monster_check
-                        mov             eax, DWORD [ypos]
-                        cmp             eax, DWORD [ebp - 4]
-                        jne             print_monster_check
-                                ; if both were equal, print the player
-                                push    PLAYER_CHAR
-                                call    putchar
-                                add             esp, 4
-                                jmp             pad
+                        ; check if the current tile is the player's position
 
-								;check whether this square contains the monster
+						mov eax, DWORD [xpos]
+						cmp eax, DWORD [ebp - 8]
+						jne check_visibility
+
+						mov eax, DWORD [ypos]
+						cmp eax, DWORD [ebp - 4]
+						jne check_visibility
+
+						; Print the player
+						push PLAYER_CHAR
+						call putchar
+						add esp, 4
+
+						jmp pad
+
+
+						;check wether the current tile is visble
+						check_visibility:
+						;pass tile coordinates to sight_check
+						push DWORD [ebp - 4]   ;tile y
+						push DWORD [ebp - 8] 	; tile x
+
+						call sight_check
+						add esp, 8
+
+						cmp eax, 1			;if tile visible render it
+						je print_monster_check
+
+						push '?'			;otherwise print hidden title
+						call putchar
+						add esp, 4
+
+						jmp pad
+
+
+
+
+						;check whether this square contains the monster
 						print_monster_check:
 								mov eax, DWORD [monster_x]
 								cmp eax, DWORD [ebp - 8]
